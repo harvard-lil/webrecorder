@@ -1,4 +1,5 @@
-FROM webrecorder/pywb:2.2.20190311
+# WR is currently using pywb:develop; this is the digest of develop on 5/21/19 11:16AM
+FROM webrecorder/pywb@sha256:5198abb159b1bf9af740a546a4a38e00a12f79398deb7f1d6376c318bb5f0014
 
 WORKDIR /build
 
