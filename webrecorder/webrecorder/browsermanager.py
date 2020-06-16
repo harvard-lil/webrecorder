@@ -23,6 +23,8 @@ class BrowserManager(object):
         self.browser_list_url = config['browser_list_url']
         self.browsers = {}
 
+        self.default_reqid = os.environ.get('BROWSER_ID')
+
         if not get_bool(os.environ.get('NO_REMOTE_BROWSERS')):
             self.load_all_browsers()
 
@@ -52,9 +54,10 @@ class BrowserManager(object):
         # init remote browser session by specified request id
         if reqid:
             container_data = self._api_reqid_to_user_params(reqid)
+            container_data['reqid'] = reqid
 
         else:
-            remote_addr = remote_ip or request.environ['REMOTE_ADDR']
+            remote_addr = remote_ip or self.default_reqid or request.environ['REMOTE_ADDR']
             user_data_key = self.BROWSER_IP_KEY.format(remote_addr)
             container_data = self.browser_redis.hgetall(user_data_key)
             container_data['ip'] = remote_addr
@@ -89,10 +92,19 @@ class BrowserManager(object):
         return container_data
 
     def update_local_browser(self, data):
-        self.browser_redis.hmset(self.BROWSER_IP_KEY.format('127.0.0.1'), data)
+        data['reqid'] = self.default_reqid or '127.0.0.1'
+        data['browser'] = ''
+        self.browser_redis.hmset(self.BROWSER_IP_KEY.format(data['reqid']), data)
 
     def browser_sesh_id(self, reqid):
         return 'reqid_' + reqid
+
+    def browser_resolve_reqid(self, reqid):
+        # if '@INIT' and unique default reqid set, use that
+        if self.default_reqid and reqid == '@INIT':
+            return self.default_reqid
+        else:
+            return reqid
 
     def _api_new_browser(self, req_url, container_data):
         r = requests.post(req_url, json=container_data)
@@ -127,7 +139,7 @@ class BrowserManager(object):
         data = {'browser': browser_id,
                 'browser_data': self.browsers.get(browser_id),
                 'url': container_data['url'],
-                'timestamp': container_data['request_ts'],
+                'timestamp': container_data['timestamp'],
                 'reqid': reqid,
                 'inactive_time': self.inactive_time,
                }
@@ -148,7 +160,7 @@ class BrowserManager(object):
             return {'error_message': 'Invalid Container'}
 
         if timestamp:
-            container_data['request_ts'] = timestamp
+            container_data['timestamp'] = timestamp
 
         if url:
             container_data['url'] = url

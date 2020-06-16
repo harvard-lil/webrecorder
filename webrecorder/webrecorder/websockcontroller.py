@@ -1,12 +1,14 @@
 from bottle import Bottle, request, HTTPError, response, HTTPResponse, redirect
 import time
 import json
+import os
 
 import gevent
 import gevent.queue
 
 from webrecorder.basecontroller import BaseController
 from webrecorder.models.dynstats import DynStats
+from webrecorder.models.stats import Stats
 
 
 # ============================================================================
@@ -20,6 +22,7 @@ class WebsockController(BaseController):
         self.content_app = kwargs['content_app']
 
         self.dyn_stats = DynStats(self.redis, config)
+        self.stats = Stats(self.redis)
 
     def init_routes(self):
         @self.app.get('/_client_ws')
@@ -47,7 +50,9 @@ class WebsockController(BaseController):
             self._raise_error(404, 'not_found')
 
         reqid = request.query.get('reqid')
+
         if reqid:
+            reqid = self.browser_mgr.browser_resolve_reqid(reqid)
             sesh_id = self.browser_mgr.browser_sesh_id(reqid)
         else:
             sesh_id = self.get_session().get_id()
@@ -120,6 +125,7 @@ class BaseWebSockHandler(object):
         self.access = websock_controller.access
 
         self.dyn_stats = websock_controller.dyn_stats
+        self.stats = websock_controller.stats
 
         self.sesh_id = sesh_id
         self.stats_urls = stats_urls or []
@@ -146,43 +152,27 @@ class BaseWebSockHandler(object):
     def run(self):
         self._init_ws(request.environ)
 
-        websocket_fd = self._get_ws_fd()
+        accum_buff = None
 
         while True:
-            self._multiplex(websocket_fd)
+            # read WS
+            buff = self._recv_ws()
+            if buff:
+                accum_buff = buff if not accum_buff else accum_buff + buff
+                accum_buff = self.handle_client_msg(accum_buff)
+
+            # read pubsub
+            if self.pubsub:
+                ps_msg = self.pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
+                if ps_msg and ps_msg['type'] == 'message':
+                    self._send_ws(ps_msg['data'])
 
             if self.updater:
                 res = self.updater.get_update()
                 if res:
                     self._send_ws(res)
 
-            gevent.sleep(0)
-
-    def _multiplex(self, websocket_fd):
-        fd_list = [websocket_fd]
-
-        if self.pubsub:
-            fd_list.append(self.pubsub.connection._sock.fileno())
-
-        ready = gevent.select.select(fd_list, [], [], 1.0)
-
-        # send ping on timeout
-        if not ready[0]:
-            self._recv_ws()
-
-        accum_buff = None
-
-        for fd in ready[0]:
-            if fd == websocket_fd:
-                buff = self._recv_ws()
-                accum_buff = buff if not accum_buff else accum_buff + buff
-                accum_buff = self.handle_client_msg(accum_buff)
-
-            elif len(fd_list) == 2 and fd == fd_list[1]:
-
-                ps_msg = self.pubsub.get_message(ignore_subscribe_messages=True)
-                if ps_msg and ps_msg['type'] == 'message':
-                    self._send_ws(ps_msg['data'])
+            gevent.sleep(1.0)
 
     def _publish(self, channel, msg):
         self.browser_redis.publish(channel, json.dumps(msg))
@@ -215,28 +205,34 @@ class BaseWebSockHandler(object):
             self.content_app.add_cookie(self.user, self.collection, self.recording,
                                         msg['name'], msg['value'], msg['domain'])
 
-        elif msg['ws_type'] == 'page':
+        elif msg['ws_type'] == 'load':
             if self.type_ != 'live':
-                if self.recording:
-                    page_local_store = msg['page']
+                if self.recording and msg.get('newPage'):
+                    page_local_store = {'url': msg.get('url'),
+                                        'timestamp': msg.get('ts'),
+                                        'title': msg.get('title'),
+                                        'browser': msg.get('browser')}
 
                     check_dupes = (self.type_ == 'patch')
 
                     self.collection.add_page(page_local_store, self.recording)
 
-                else:
-                    print('Invalid Rec for Page Data')
-
-            if from_browser and msg.get('visible'):
-                msg['ws_type'] = 'remote_url'
-
         elif msg['ws_type'] == 'config-stats':
             self.stats_urls = msg['stats_urls']
 
-        elif msg['ws_type'] == 'set_url':
+        elif msg['ws_type'] == 'replace-url':
             self.stats_urls = [msg['url']]
 
-        elif msg['ws_type'] == 'switch':
+        elif msg['ws_type'] == 'behavior-stat':
+            self.stats.incr_behavior_stat(msg.get('type'), msg.get('name'), self.browser)
+
+        elif msg['ws_type'] == 'behavior':
+            self.stats.incr_behavior_stat('start', msg.get('name'), self.browser)
+
+        elif msg['ws_type'] == 'behaviorDone':
+            self.stats.incr_behavior_stat('done', msg.get('name'), self.browser)
+
+        elif msg['ws_type'] == 'reload':
             #TODO: check this
             if not self.access.can_write_coll(self.collection):
                 print('No Write Access')
@@ -249,11 +245,11 @@ class BaseWebSockHandler(object):
 
         # send to remote browser cmds
         if to_browser:
-            if msg['ws_type'] in ('set_url', 'autoscroll', 'load_all', 'switch', 'snapshot-req'):
+            if msg['ws_type'] in ('replace-url', 'behavior', 'reload'):
                 self._publish(to_browser, msg)
 
         elif from_browser:
-            if msg['ws_type'] in ('remote_url', 'patch_req', 'autoscroll_resp', 'snapshot'):
+            if msg['ws_type'] in ('replace-url', 'load', 'patch_req', 'behaviorDone', 'behaviorStop', 'behaviorStep'):
                 self._publish(from_browser, msg)
 
     def get_status(self):
@@ -293,9 +289,6 @@ class BaseWebSockHandler(object):
 
 # ============================================================================
 class UwsgiWebSockHandler(BaseWebSockHandler):
-    def _get_ws_fd(self):
-        return uwsgi.connection_fd()
-
     def _init_ws(self, env):
         uwsgi.websocket_handshake(env['HTTP_SEC_WEBSOCKET_KEY'],
                                   env.get('HTTP_ORIGIN', ''))
@@ -309,10 +302,6 @@ class UwsgiWebSockHandler(BaseWebSockHandler):
 
 # ============================================================================
 class GeventWebSockHandler(BaseWebSockHandler):
-    def _get_ws_fd(self):
-        socket = self._ws.stream.handler.socket
-        return socket
-
     def _init_ws(self, env):
         self._ws = env['wsgi.websocket']
 

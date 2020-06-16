@@ -1,5 +1,7 @@
 import HttpStatus from 'components/HttpStatus';
-import { FAQ, TermsAndPolicies } from 'components/siteComponents';
+import { ApiDocs, Documentation, FAQ, TermsAndPolicies } from 'components/siteComponents';
+import { product } from 'config';
+
 import {
   collDetailBreadcrumb,
   collList,
@@ -13,6 +15,7 @@ import {
   Extract,
   Home,
   ListDetail,
+  Login,
   Logout,
   NewPassword,
   NewRecording,
@@ -21,9 +24,13 @@ import {
   Record,
   RegisterAccount,
   Replay,
-  UserSignup,
-  UserSettings
+  UserSignup
 } from './containers';
+
+
+const SettingsUI = __DESKTOP__ ?
+  require('containers/DesktopSettings/DesktopSettings') :
+  require('containers/UserSettings/UserSettings');
 
 
 const userPath = '/:user([^_][A-Za-z0-9-_]+)';
@@ -40,7 +47,7 @@ const userRoutes = [
   {
     path: `${userPath}/_settings`,
     breadcrumb: 'Settings',
-    component: UserSettings,
+    component: SettingsUI,
     exact: true,
     footer: true,
     name: 'settings'
@@ -98,7 +105,7 @@ const userRoutes = [
   }
 ];
 
-const controllerRoutes = [
+const captureRoutes = [
   {
     path: `${userPath}/:coll/$new`,
     breadcrumb: 'New Session',
@@ -164,7 +171,26 @@ const controllerRoutes = [
     exact: true,
     footer: false,
     name: 'extract'
-  },
+  }
+]
+
+if (__DESKTOP__) {
+  const Live = require('containers/Live/Live');
+  // live browser pepare (for desktop)
+  captureRoutes.push(
+    {
+      path: `${userPath}/:coll/live/:splat(.*)`,
+      breadcrumb: 'Live',
+      classOverride: '',
+      component: Live,
+      exact: true,
+      footer: false,
+      name: 'live prepare'
+    }
+  );
+}
+
+const replayRoutes = [
   {
     path: `/:embed(_embed|_embed_noborder)${userPath}/:coll/list/:listSlug/b:bookmarkId([0-9]+)/:ts([0-9]+)?$br::br([a-z0-9-:]+)/:splat(.*)`,
     classOverride: '',
@@ -251,6 +277,19 @@ const infoRoutes = [
     exact: true,
     footer: true,
     name: 'Terms & Policies'
+  },
+  {
+    path: '/docs',
+    component: Documentation,
+    name: 'apidocs',
+    exact: true,
+  },
+  {
+    breadcrumb: 'Webrecorder API Docs',
+    path: '/docs/api',
+    component: ApiDocs,
+    name: 'apidocs',
+    exact: true,
   }
 ];
 
@@ -259,6 +298,7 @@ export default [
   {
     path: '/',
     component: Home,
+    name: 'landing',
     exact: true,
     footer: true
   },
@@ -272,7 +312,7 @@ export default [
   },
   {
     path: '/_valreg/:registration',
-    breadcrumb: 'Registering',
+    breadcrumb: 'Complete Registration',
     component: RegisterAccount,
     exact: true,
     footer: true,
@@ -295,6 +335,14 @@ export default [
     name: 'Password Reset'
   },
   {
+    path: '/_login',
+    breadcrumb: `Log in to ${product}`,
+    component: Login,
+    exact: true,
+    footer: true,
+    name: 'login'
+  },
+  {
     path: '/_logout',
     breadcrumb: 'Logging out..',
     component: Logout,
@@ -305,7 +353,8 @@ export default [
 
   ...infoRoutes,
   ...userRoutes,
-  ...controllerRoutes,
+  ...captureRoutes,
+  ...replayRoutes,
 
   {
     path: '/(.*)',

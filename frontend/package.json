@@ -15,12 +15,12 @@
     "eslint-plugin-import": "2.14.0",
     "eslint-plugin-jsx-a11y": "^6.1.2",
     "eslint-plugin-react": "7.11.1",
-    "jest": "23.6.0",
+    "jest": "24.8.0",
     "nodemon": "^1.18.7",
     "npm-run-all": "^4.1.5",
     "redux-devtools": "^3.4.2",
     "speed-measure-webpack-plugin": "^1.2.3",
-    "webpack-bundle-analyzer": "^3.0.3",
+    "webpack-bundle-analyzer": "^3.3.2",
     "webpack-merge": "^4.1.4"
   },
   "dependencies": {
@@ -44,7 +44,7 @@
     "babel-plugin-transform-react-remove-prop-types": "^0.4.20",
     "better-npm-run": "^0.1.1",
     "bootstrap-loader": "^3.0.2",
-    "bootstrap-sass": "^3.3.7",
+    "bootstrap-sass": "^3.4.1",
     "cache-loader": "^2.0.1",
     "circular-dependency-plugin": "^5.0.2",
     "classnames": "^2.2.6",
@@ -98,10 +98,11 @@
     "resolve-url-loader": "^2.3.0",
     "sass-loader": "^7.1.0",
     "serialize-javascript": "^1.5.0",
-    "shepherd-client": "github:oldweb-today/shepherd-client#develop",
+    "shepherd-client": "github:oldweb-today/shepherd-client#1.2.0",
     "strip-loader": "^0.1.2",
     "style-loader": "0.23.1",
     "superagent": "^4.0.0",
+    "swagger-ui": "^3.23.11",
     "time-fix-plugin": "^2.0.5",
     "universal-webpack": "^0.6.6",
     "url-loader": "1.1.2",
@@ -117,16 +118,18 @@
   "scripts": {
     "analyze": "STATS=true webpack --config ./webpack/webpack.config.client.production.babel.js --profile --json > stats.json",
     "build-player-dev": "better-npm-run build-player-dev",
+    "build-desktop-dev": "better-npm-run build-desktop-dev",
     "build-player": "better-npm-run build-player",
+    "build-desktop": "better-npm-run build-desktop",
     "dev:server:prepare": "universal-webpack --settings ./webpack/universal-webpack-settings.json prepare",
     "docker-dev": "run-p docker-dev:client:build dev:server:prepare docker-dev:server:build docker-dev:server:start",
-    "docker-prod": "run-s prod:client:build prod:server:build start-docker-prod",
+    "docker-prod": "run-s prod:client:build prod:server:build docker-prod:server:start",
     "docker-dev:client:build": "babel-node webpack/webpack-dev-server.js",
     "docker-dev:server:build": "webpack --config ./webpack/webpack.config.server.development.babel.js --watch",
     "docker-dev:server:start": "better-npm-run start-docker-dev",
+    "docker-prod:server:start": "better-npm-run start-docker-prod",
     "prod:client:build": "webpack --config ./webpack/webpack.config.client.production.babel.js",
     "prod:server:build": "webpack --config ./webpack/webpack.config.server.production.babel.js",
-    "start-docker-prod": "better-npm-run start-docker-prod",
     "test": "jest --watch --env=jsdom"
   },
   "betterScripts": {
@@ -140,6 +143,18 @@
       "command": "webpack --verbose --colors --display-error-details --config webpack/player.config.js",
       "env": {
         "NODE_ENV": "production"
+      }
+    },
+    "build-desktop": {
+      "command": "webpack --verbose --colors --display-error-details --config webpack/desktop.config.js",
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    "build-desktop-dev": {
+      "command": "webpack --config webpack/desktop.config.js --watch --progress",
+      "env": {
+        "NODE_ENV": "development"
       }
     },
     "start-docker-dev": {

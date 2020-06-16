@@ -2,16 +2,16 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import Collapsible from 'react-collapsible';
-import { Button, FormControl, HelpBlock, Row } from 'react-bootstrap';
+import { Button, ControlLabel, FormControl, FormGroup, HelpBlock, Row } from 'react-bootstrap';
 
 import { appHost, defaultRecDesc } from 'config';
 import { addTrailingSlash, apiFetch, fixMalformedUrls } from 'helpers/utils';
 
 import { CollectionDropdown, ExtractWidget, RemoteBrowserSelect } from 'containers';
 
-import WYSIWYG from 'components/WYSIWYG';
-
 import './style.scss';
+
+const ipcRenderer = __DESKTOP__ ? window.require('electron').ipcRenderer : null;
 
 
 class StandaloneRecorderUI extends Component {
@@ -22,6 +22,7 @@ class StandaloneRecorderUI extends Component {
   static propTypes = {
     activeCollection: PropTypes.object,
     extractable: PropTypes.object,
+    history: PropTypes.object,
     selectedBrowser: PropTypes.string,
     spaceUtilization: PropTypes.object,
     toggleLogin: PropTypes.func,
@@ -37,7 +38,8 @@ class StandaloneRecorderUI extends Component {
       initialOpen: hasRB,
       sessionNotes: '',
       setColl: false,
-      url: ''
+      url: '',
+      validation: null
     };
   }
 
@@ -53,9 +55,29 @@ class StandaloneRecorderUI extends Component {
     this.setState({ [evt.target.name]: evt.target.value });
   }
 
+  startPreview = (evt) => {
+    evt.preventDefault();
+    const { history, username, activeCollection } = this.props;
+    const { url } = this.state;
+
+    if (!url) {
+      return this.setState({ validation: 'error' });
+    }
+
+    if (!this.context.isAnon && !activeCollection.id) {
+      this.setState({ setColl: true });
+      return false;
+    }
+
+    this.setState({ validation: null });
+
+    const cleanUrl = addTrailingSlash(fixMalformedUrls(url));
+    history.push(`/${username}/${activeCollection.id}/live/${cleanUrl}`);
+  }
+
   startRecording = (evt) => {
     evt.preventDefault();
-    const { activeCollection, extractable, history, selectedBrowser } = this.props;
+    const { activeCollection, extractable, history, selectedBrowser, username } = this.props;
     const { sessionNotes, url } = this.state;
 
     if (!url) {
@@ -116,13 +138,13 @@ class StandaloneRecorderUI extends Component {
 
     return (
       <form className="start-recording-homepage" onSubmit={this.startRecording}>
-        <div className={classNames('col-md-8 col-md-offset-2', { 'input-group': extractable })}>
+        <FormGroup className={classNames('col-md-8 col-md-offset-2', { 'input-group': extractable })} validationState={this.state.validation}>
+          <ControlLabel htmlFor="url" aria-label="url" srOnly>Url</ControlLabel>
           <FormControl id="url" aria-label="url" type="text" name="url" onChange={this.handleInput} style={{ height: '33px' }} value={url} placeholder="URL to capture" title={isOutOfSpace ? 'Out of space' : 'Enter URL to capture'} required disabled={isOutOfSpace} />
-          <label htmlFor="url" aria-label="url" className="control-label sr-only">Url</label>
           <ExtractWidget
             toCollection={activeCollection.title}
             url={url} />
-        </div>
+        </FormGroup>
 
         <div className="col-md-8 col-md-offset-2 top-buffer">
           <Row>
@@ -143,11 +165,14 @@ class StandaloneRecorderUI extends Component {
           </Row>
         </div>
 
-        <div className="col-md-8 col-md-offset-2 top-buffer rb-dropdown">
-          <Row>
-            <p className="col-md-2 standalone-dropdown-label">Select browser</p><div className="col-md-10"><RemoteBrowserSelect /></div>
-          </Row>
-        </div>
+        {
+          !__DESKTOP__ &&
+            <div className="col-md-8 col-md-offset-2 top-buffer rb-dropdown">
+              <Row>
+                <p className="col-md-2 standalone-dropdown-label">Select browser</p><div className="col-md-10"><RemoteBrowserSelect /></div>
+              </Row>
+            </div>
+        }
 
         <div className="col-md-8 col-md-offset-2 top-buffer">
           <Collapsible
@@ -159,13 +184,22 @@ class StandaloneRecorderUI extends Component {
             overflowWhenOpen="visible"
             transitionTime={300}
             trigger={advOptions}>
-            <h4>Session Notes</h4>
-            <textarea rows={5} ref={(o) => { this.textarea = o; }} onFocus={this.handleFocus} name="sessionNotes" placeholder={defaultRecDesc} value={this.state.sessionNotes} onChange={this.handleInput} />
+            <div className="session-settings">
+              <div>
+                <h4>Session Notes</h4>
+                <textarea rows={5} ref={(o) => { this.textarea = o; }} onFocus={this.handleFocus} name="sessionNotes" placeholder={defaultRecDesc} value={this.state.sessionNotes} onChange={this.handleInput} />
+              </div>
+            </div>
           </Collapsible>
-          <Button type="submit" aria-label="start recording" disabled={isOutOfSpace}>
-            Start
+          <Button type="submit" className="rounded btn-primary" aria-label="start recording" disabled={isOutOfSpace}>
+            Start Capture
           </Button>
+          {
+            __DESKTOP__ &&
+              <button onClick={this.startPreview} type="button" className="rounded" aria-label="start preview">Preview</button>
+          }
         </div>
+        <div className="clearfix" />
       </form>
     );
   }

@@ -20,8 +20,27 @@ try {
   localSettings = {};
 }
 
-// custom app domain or localhost default port mapping
-const appHost = process.env.APP_HOST ? process.env.APP_HOST : `localhost:8089`;
+
+let appHost = null;
+
+let isDesktop = false;
+
+try {
+  isDesktop = __DESKTOP__;
+} catch (e) {
+  // ignore, if undefined, not desktop
+}
+
+if (isDesktop) {
+  const remoteProcess = window.require('electron').remote.process;
+  process.env.INTERNAL_HOST = remoteProcess.env.INTERNAL_HOST;
+  process.env.INTERNAL_PORT = remoteProcess.env.INTERNAL_PORT;
+  appHost = `localhost:` + remoteProcess.env.INTERNAL_PORT;
+} else {
+
+  // custom app domain or localhost default port mapping
+  appHost = process.env.APP_HOST ? process.env.APP_HOST : `localhost:8089`;
+}
 
 // customizable hosting scheme
 const hostScheme = process.env.SCHEME ? process.env.SCHEME : 'http';
@@ -35,6 +54,7 @@ const publicIP = process.env.PUBLIC_IP ? process.env.PUBLIC_IP : appHost;
 
 
 export default Object.assign({
+  anonDisabled: process.env.ANON_DISABLED,
   announceMailingList: process.env.ANNOUNCE_MAILING_LIST,
   apiProxy: false,
   apiPath: '/api/v1',
@@ -65,6 +85,7 @@ export default Object.assign({
     PAGE_ITEM: 'pageItem',
     TH: 'tableHeader'
   },
+  filterBrowsers: ['chrome:76', 'firefox:68', 'firefox:49'],
   guestSessionTimeout: '90mins',
   homepageAnnouncement: '',
   internalApiHost: process.env.INTERNAL_HOST,
@@ -78,6 +99,7 @@ export default Object.assign({
   saveDelay: 1000,
   storageKey: 'wr__',
   supportEmail: 'support@webrecorder.io',
+  supporterPortal: '',
   tagline: 'Create high-fidelity, interactive web archives of any web site you browse.',
   truncSentence: new RegExp(/([.!?])/),
   truncWord: new RegExp(/(\s)/),

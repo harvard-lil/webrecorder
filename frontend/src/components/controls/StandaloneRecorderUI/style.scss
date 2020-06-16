@@ -60,16 +60,25 @@
 .record-action button {
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
+    border-top-right-radius: 2.7rem;
+    border-bottom-right-radius: 2.7rem;
     border-left-width: 0;
 }
 
 .start-recording-homepage {
-    button[type='submit'] {
+    button {
+        float: right;
+    }
+
+    button + button {
+        margin-right: .5rem;
+    }
+
+    button#prepare {
         float: right;
         margin-top: 1.5rem;
-        background: $blue;
-        color: #FFF;
         padding: 1rem 2rem;
+        margin-right: 8px;
     }
 
     .Collapsible__trigger {
@@ -128,4 +137,28 @@
 
 .main-bar .container {
     width: 65vw;
+}
+
+.session-settings {
+    display: flex;
+
+    & > div:not(.divider) {
+        width: 100%;
+        flex-grow: 1;
+    }
+
+    .divider {
+        margin: 0 2rem;
+        border: solid 1px #CCC;
+    }
+
+    .cookie-buttons {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+
+        button + button {
+            margin-top: .5rem;
+        }
+    }
 }

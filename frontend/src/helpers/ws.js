@@ -1,9 +1,10 @@
-import { updateUrlAndTimestamp } from 'store/modules/controls';
-import { setStats } from 'store/modules/infoStats';
-
 import config from 'config';
 
 import { remoteBrowserMod } from 'helpers/utils';
+
+import { autopilotCheck, autopilotReset, autopilotReady, toggleAutopilot, updateBehaviorState, updateBehaviorMessage } from 'store/modules/automation';
+import { setMethod, updateUrlAndTimestamp } from 'store/modules/controls';
+import { setStats } from 'store/modules/infoStats';
 
 
 class WebSocketHandler {
@@ -16,6 +17,7 @@ class WebSocketHandler {
     this.coll = coll;
     this.rec = rec;
     this.reqUrl = splat;
+    this.url = splat;
     this.useWS = false;
     this.dispatch = dispatch;
     this.lastPopUrl = undefined;
@@ -27,6 +29,7 @@ class WebSocketHandler {
     this.br = br;
     this.reqId = reqId;
     this.wsEndpoint = '_client_ws';
+    this.internalUpdate = false;
 
     if (this.isRemoteBrowser) {
       window.addEventListener('popstate', this.syncOuterFrameState);
@@ -97,18 +100,44 @@ class WebSocketHandler {
     const msg = JSON.parse(evt.data);
 
     switch (msg.ws_type) {
+      case 'behaviorDone': // when autopilot is done running
+        if (this.isRemoteBrowser) {
+          this.dispatch(toggleAutopilot(null, 'complete', this.url));
+          this.dispatch(updateBehaviorMessage('Behavior Done'));
+        }
+        break;
+      case 'behaviorStop': // when autopilot is stopped manually
+        if (this.isRemoteBrowser) {
+          this.dispatch(toggleAutopilot(null, 'stopped', this.url));
+          this.dispatch(updateBehaviorMessage('Behavior Stopped By User'));
+        }
+        break;
+      case 'behaviorStep':
+        if (this.isRemoteBrowser) {
+          this.dispatch(updateBehaviorState(msg.result));
+        }
+        break;
       case 'status':
         if (msg.stats || msg.size || msg.pending_size) {
           this.dispatch(setStats(msg.stats, msg.size || 0, msg.pending_size || 0));
         }
         break;
-      case 'remote_url': {
+      case 'load':
         if (this.isRemoteBrowser) {
-          const { page } = msg;
-          this.dispatch(updateUrlAndTimestamp(page.url, page.timestamp));
-
-          //setTitle("Remote", page.url, page.title);
-          this.replaceOuterUrl(page, "load");
+          if (msg.readyState === 'interactive') {
+            this.dispatch(setMethod('navigation'));
+            this.dispatch(autopilotReset());
+            this.dispatch(autopilotCheck(msg.url));
+            this.replaceOuterUrl(msg);
+          } else if (msg.readyState === 'complete') {
+            this.dispatch(autopilotReady());
+          }
+        }
+        break;
+      case 'replace-url': {
+        if (this.isRemoteBrowser) {
+          this.dispatch(setMethod('history'));
+          this.replaceOuterUrl(msg);
         }
         break;
       }
@@ -120,9 +149,6 @@ class WebSocketHandler {
             // EventHandlers.switchCBPatch(getUrl());
           }
         }
-        break;
-      case 'snapshot':
-        // Snapshot.updateModal(msg);
         break;
       default:
         console.log(msg);
@@ -145,6 +171,8 @@ class WebSocketHandler {
 
       switch (state.change) {
         case 'load':
+          // local history, but remote browser navigation here
+          this.dispatch(setMethod('navigation'));
           this.setRemoteUrl(state.url);
           break;
         case 'patch':
@@ -161,10 +189,15 @@ class WebSocketHandler {
     }
   }
 
-  replaceOuterUrl = (msg, change) => {
-    const ts = msg.timestamp;
+  replaceOuterUrl = (msg) => {
+    const { ts, url } = msg;
+
+    this.internalUpdate = true;
+
+    this.dispatch(updateUrlAndTimestamp(url, ts));
+    this.url = url;
+
     const mod = remoteBrowserMod(this.br, ['replay', 'replay-coll', 'patch', 'extract', 'extract_only'].includes(this.currMode) && ts ? ts : null, '/');
-    const { url } = msg;
     let prefix;
 
     if (this.currMode.includes('replay')) {
@@ -181,14 +214,13 @@ class WebSocketHandler {
       prefix = `${config.appHost}/${this.user}/${this.coll}/${this.rec}/${this.currMode}:${archiveId}${collId || ''}/`;
     }
 
-    msg.change = change;
-
-    if (url !== this.lastPopUrl) {
+    if (msg.ws_type === 'load' && url !== this.lastPopUrl) {
+      msg.change = 'load';
       window.history.pushState(msg, msg.title, prefix + mod + url);
-      this.lastPopUrl = undefined;
-    } else if (change === 'load') {
-      this.lastPopUrl = undefined;
+    } else if (msg.ws_type !== 'load') {
+      window.history.replaceState(msg, msg.title, prefix + mod + url);
     }
+    this.lastPopUrl = undefined;
   }
 
   /* actions */
@@ -197,15 +229,19 @@ class WebSocketHandler {
   }
 
   addPage = (page) => {
-    return this.sendMsg({ ws_type: 'page', page });
+    return this.sendMsg({ ws_type: 'load', ...page });
   }
 
   addSkipReq = (url) => {
     return this.sendMsg({ ws_type: 'skipreq', url });
   }
 
-  doAutoscroll = () => {
-    return this.sendMsg({ ws_type: 'autoscroll' });
+  behaviorStat = (type, name) => {
+    return this.sendMsg({ ws_type: 'behavior-stat', name, type });
+  }
+
+  doBehavior = (url, name) => {
+    return this.sendMsg({ ws_type: 'behavior', url, name, start: !!name });
   }
 
   doLoadAll = () => {
@@ -221,7 +257,11 @@ class WebSocketHandler {
   }
 
   setRemoteUrl = (url) => {
-    return this.sendMsg({ ws_type: 'set_url', url });
+    if (this.internalUpdate) {
+      this.internalUpdate = false;
+      return true;
+    }
+    return this.sendMsg({ ws_type: 'replace-url', url });
   }
 
   switchMode = (rec, mode, msg) => {
@@ -231,7 +271,7 @@ class WebSocketHandler {
     // replaceOuterUrl(msg, type);
 
     return this.sendMsg({
-      ws_type: 'switch',
+      ws_type: 'reload',
       type: mode,
       rec
     });

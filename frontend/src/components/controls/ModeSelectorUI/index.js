@@ -8,7 +8,7 @@ import { apiFetch, remoteBrowserMod } from 'helpers/utils';
 
 import OutsideClick from 'components/OutsideClick';
 import { PatchIcon, SnapshotIcon } from 'components/icons';
-import { Blinker } from 'containers';
+import { Blinker, SizeCounter } from 'containers';
 
 import './style.scss';
 
@@ -36,23 +36,28 @@ class ModeSelectorUI extends PureComponent {
     evt.preventDefault();
     const { match: { params: { coll, rec, user } } } = this.props;
 
-    if (this.context.currMode.indexOf('replay') !== -1) {
-      window.location.href = `/${user}/${coll}/manage`;
+    if (this.context.currMode === "live") {
+      this.props.history.push('/');
+    } else if (this.context.currMode.indexOf('replay') !== -1) {
+      //window.location.href = `/${user}/${coll}/index`;
+      this.props.history.push(`/${user}/${coll}/manage`);
     } else {
-      window.location.href = `/${user}/${coll}/manage?query=session:${rec}`;
+      //window.location.href = `/${user}/${coll}/index?query=session:${rec}`;
+      this.props.history.push(`/${user}/${coll}/manage?query=session:${rec}`);
     }
   }
 
   onReplay = () => {
     const { activeBrowser, match: { params: { coll, user } }, timestamp, url } = this.props;
 
-    window.location.href = `/${user}/${coll}/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`;
+    //window.location.href = `/${user}/${coll}/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`;
+    this.props.history.push(`/${user}/${coll}/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`);
   }
 
   onPatch = () => {
     if (this.context.currMode === 'record') return;
 
-    const { activeBrowser, match: { params: { coll } }, timestamp, url } = this.props;
+    const { activeBrowser, history, match: { params: { coll } }, timestamp, url } = this.props;
 
     // data to create new recording
     const data = {
@@ -69,14 +74,14 @@ class ModeSelectorUI extends PureComponent {
     // generate recording url
     apiFetch('/new', data, { method: 'POST' })
       .then(res => res.json())
-      .then(({ url }) => { window.location.href = url.replace(config.appHost, ''); })
+      .then(({ url }) => history.push(url.replace(config.appHost, '')))
       .catch(err => console.log('error', err));
   }
 
   onRecord = () => {
     if (this.context.currMode === 'record') return;
 
-    const { activeBrowser, match: { params: { coll } }, url } = this.props;
+    const { activeBrowser, history, match: { params: { coll } }, url } = this.props;
     const data = {
       url,
       coll,
@@ -90,7 +95,7 @@ class ModeSelectorUI extends PureComponent {
     // generate recording url
     apiFetch('/new', data, { method: 'POST' })
       .then(res => res.json())
-      .then(({ url }) => { window.location.href = url.replace(config.appHost, ''); })
+      .then(({ url }) => history.push(url.replace(config.appHost, '')))
       .catch(err => console.log('error', err));
   }
 
@@ -130,8 +135,14 @@ class ModeSelectorUI extends PureComponent {
     const isRecord = currMode === 'record';
     const isExtract = currMode.indexOf('extract') !== -1;
     const isPatch = currMode === 'patch';
+    const isLive = currMode === 'live';
+    const isWrite = ['extract', 'extract_only', 'patch', 'record'].includes(currMode);
 
     switch(currMode) {
+      case 'live':
+        modeMessage = 'Previewing';
+        modeMarkup = <span className="btn-content"><span className="preview-mode" aria-label="Preview icon" /><span className="hidden-xs">{ modeMessage }</span></span>;
+        break;
       case 'record':
         modeMessage = 'Capturing';
         modeMarkup = <span className="btn-content"><Blinker /> <span className="hidden-xs">{ modeMessage }</span></span>;
@@ -155,6 +166,7 @@ class ModeSelectorUI extends PureComponent {
     }
 
     const modeSelectorClasses = classNames('wr-mode-selector', 'btn-group', { open });
+    const isLiveMsg = isLive ? 'Start Capturing' : 'Capture this URL again';
 
     return (
       <OutsideClick handleClick={this.close}>
@@ -163,64 +175,70 @@ class ModeSelectorUI extends PureComponent {
             <button onClick={this.onStop} className="btn btn-default wr-mode-message content-action" aria-label={`Finish ${modeMessage} session`} type="button">
               <span className="btn-content"><span className="glyphicon glyphicon-stop" /> <span className="hidden-xs">Stop</span></span>
               { modeMarkup }
+              { isWrite && <SizeCounter /> }
             </button>
             <button onClick={this.toggle} type="button" className="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <span className="glyphicon glyphicon-triangle-bottom" />
             </button>
 
             <div className="dropdown-menu">
-              <div className="wr-modes">
-                <ul className={classNames('row wr-mode', { active: isReplay })} onClick={this.onReplay} role="button" title="Access an archived version of this URL">
-                  <li className="col-xs-3">
-                    <span className="glyphicon glyphicon-play-circle wr-mode-icon" aria-hidden="true" />
-                  </li>
-                  <li className="col-xs-9">
-                    <h5>{ isReplay ? 'Currently Browsing' : 'Browse this URL' }</h5>
-                  </li>
-                </ul>
-
-                <ul className={classNames('row wr-mode', { active: isPatch, disabled: isRecord })} onClick={this.onPatch} role="button" title={isRecord ? 'Only available from replay after finishing a recording' : 'Record elements that are not yet in the collection'}>
-                  <li className="col-xs-3">
-                    <PatchIcon />
-                  </li>
-                  <li className="col-xs-9">
-                    <h5>{ isPatch ? 'Currently Patching' : 'Patch this URL' }</h5>
-                  </li>
-                </ul>
-
-                <ul className={classNames('row wr-mode', { active: isRecord })} onClick={this.onRecord} role="button" title="Start a new recording session at the current URL">
-                  <li className="col-xs-3">
-                    <span className="glyphicon glyphicon-dot-sm glyphicon-recording-status wr-mode-icon" aria-hidden="true" />
-                  </li>
-                  <li className="col-xs-9">
-                    <h5>{ isRecord ? 'Currently Capturing' : 'Capture this URL again' }</h5>
-                  </li>
-                </ul>
-
-                {
-                  isExtract &&
-                    <ul className={classNames('row wr-mode', { active: isExtract })} title="Start a new extraction at the current URL">
+              {
+                isLive &&
+                  <div className="wr-modes">
+                    <ul className={classNames('row wr-mode')} onClick={this.onRecord} role="button" title="Stop preview mode and begin capturing">
                       <li className="col-xs-3">
-                        <span className="glyphicon glyphicon-save glyphicon-recording-status wr-mode-icon" aria-hidden="true" />
+                        <span className="glyphicon glyphicon-dot-sm glyphicon-recording-status wr-mode-icon" aria-hidden="true" />
                       </li>
                       <li className="col-xs-9">
-                        <h5>Currently Extracting</h5>
+                        <h5>Start Capture</h5>
                       </li>
                     </ul>
-                }
+                  </div>
+              }
 
-                {/*
-                  <div className="divider" role="separator" />
-                  <ul className="row wr-mode" onClick={this.onStaticCopy} role="button" title="A special recording that contains an exact, static copy of the document as currently displayed. Scripting is removed, so interaction with the copy is limited">
-                    <li className="col-xs-3">
-                      <SnapshotIcon />
-                    </li>
-                    <li className="col-xs-9">
-                      <h5>Static Copy</h5>
-                    </li>
-                  </ul>
-                */}
-              </div>
+              {
+                !isLive &&
+                  <div className="wr-modes">
+                    <ul className={classNames('row wr-mode', { active: isRecord })} onClick={this.onRecord} role="button" title="Start a new recording session at the current URL">
+                      <li className="col-xs-3">
+                        <span className="glyphicon glyphicon-dot-sm glyphicon-recording-status wr-mode-icon" aria-hidden="true" />
+                      </li>
+                      <li className="col-xs-9">
+                        <h5>{ isRecord ? 'Currently Capturing' : isLiveMsg }</h5>
+                      </li>
+                    </ul>
+
+                    <ul className={classNames('row wr-mode', { active: isReplay, disabled: isLive })} onClick={this.onReplay} role="button" title="Access an archived version of this URL">
+                      <li className="col-xs-3">
+                        <span className="glyphicon glyphicon-play-circle wr-mode-icon" aria-hidden="true" />
+                      </li>
+                      <li className="col-xs-9">
+                        <h5>{ isReplay ? 'Currently Browsing' : 'Browse this URL' }</h5>
+                      </li>
+                    </ul>
+
+                    <ul className={classNames('row wr-mode', { active: isPatch, disabled: isRecord || isLive })} onClick={this.onPatch} role="button" title={isRecord ? 'Only available from replay after finishing a recording' : 'Record elements that are not yet in the collection'}>
+                      <li className="col-xs-3">
+                        <PatchIcon />
+                      </li>
+                      <li className="col-xs-9">
+                        <h5>{ isPatch ? 'Currently Patching' : 'Patch this URL' }</h5>
+                      </li>
+                    </ul>
+
+                    {
+                      isExtract &&
+                        <ul className={classNames('row wr-mode', { active: isExtract })} title="Start a new extraction at the current URL">
+                          <li className="col-xs-3">
+                            <span className="glyphicon glyphicon-save glyphicon-recording-status wr-mode-icon" aria-hidden="true" />
+                          </li>
+                          <li className="col-xs-9">
+                            <h5>Currently Extracting</h5>
+                          </li>
+                        </ul>
+                    }
+                  </div>
+              }
             </div>
           </div>
         </div>

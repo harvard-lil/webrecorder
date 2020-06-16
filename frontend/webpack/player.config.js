@@ -157,7 +157,6 @@ module.exports = {
     new CopyWebpackPlugin([
       'src/shared/images/favicon.png',
       'src/shared/images/webrecorder-social.png',
-      'src/helpers/preload.js'
     ]),
     new CleanPlugin([assetsPath], { root: projectRootPath }),
 
@@ -180,7 +179,8 @@ module.exports = {
       __SERVER__: false,
       __DEVELOPMENT__: true,
       __DEVTOOLS__: true,
-      __PLAYER__: true
+      __PLAYER__: true,
+      __DESKTOP__: true
     })
   ]
 };

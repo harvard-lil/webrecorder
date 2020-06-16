@@ -9,6 +9,7 @@ import { RemoteBrowserOption } from 'components/controls';
 
 import 'shared/scss/dropdown.scss';
 
+import { filterBrowsers } from 'config';
 
 class RemoteBrowserSelectUI extends PureComponent {
   static contextTypes = {
@@ -21,6 +22,7 @@ class RemoteBrowserSelectUI extends PureComponent {
     activeBookmarkId: PropTypes.string,
     activeBrowser: PropTypes.string,
     activeList: PropTypes.string,
+    autopilotRunning: PropTypes.bool,
     browsers: PropTypes.object,
     getBrowsers: PropTypes.func,
     history: PropTypes.object,
@@ -82,7 +84,7 @@ class RemoteBrowserSelectUI extends PureComponent {
   }
 
   render() {
-    const { active, activeBrowser, browsers, loading, loaded, selectedBrowser } = this.props;
+    const { active, activeBrowser, autopilotRunning, browsers, loading, loaded, selectedBrowser } = this.props;
     const { open } = this.state;
 
     // if this in an active instance of the widget (on replay/record interface) use activeBrowser prop
@@ -90,6 +92,19 @@ class RemoteBrowserSelectUI extends PureComponent {
     const instanceContext = active ? activeBrowser : selectedBrowser;
 
     const activeBrowserEle = browsers ? browsers.find(b => b.get('id') === instanceContext) : null;
+
+    let showBrowsers = [];
+
+    if (browsers && filterBrowsers) {
+      filterBrowsers.forEach((id) => {
+        const browser = browsers.get(id);
+        if (browser) {
+          showBrowsers.push(browser);
+        }
+      });
+    } else if (browsers) {
+      showBrowsers = browsers.valueSeq();
+    }
 
     const btn = activeBrowserEle ?
       (
@@ -104,6 +119,7 @@ class RemoteBrowserSelectUI extends PureComponent {
         id="cnt-button"
         title={btn}
         bsStyle="default"
+        disabled={autopilotRunning}
         open={open}
         onToggle={this.getRemoteBrowsers}>
         <div className="container">
@@ -117,8 +133,8 @@ class RemoteBrowserSelectUI extends PureComponent {
           { loading &&
             <div>loading options..</div>
           }
-          { loaded && browsers &&
-              browsers.valueSeq().map(browser => <RemoteBrowserOption browser={browser} key={browser.get('id') ? browser.get('id') : 'native'} selectBrowser={this.selectBrowser} isActive={instanceContext === browser.get('id')} />)
+          { loaded && showBrowsers &&
+              showBrowsers.map(browser => <RemoteBrowserOption browser={browser} key={browser.get('id') ? browser.get('id') : 'native'} selectBrowser={this.selectBrowser} isActive={instanceContext === browser.get('id')} />)
           }
           {
             <RemoteBrowserOption browser={fromJS({ id: null, name: 'Use Current Browser' })} selectBrowser={this.selectBrowser} isActive={instanceContext === null} />

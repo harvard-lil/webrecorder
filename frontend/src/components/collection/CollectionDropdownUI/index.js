@@ -58,7 +58,7 @@ class CollectionDropdownUI extends Component {
 
   componentWillMount() {
     const { loadUserCollections, auth } = this.props;
-    if (!auth.getIn(['user', 'anon']) && Date.now() - auth.get('accessed') > 2 * 60 * 1000) {
+    if (auth.getIn(['user', 'username']) && !auth.getIn(['user', 'anon']) && Date.now() - auth.get('accessed') > 10000) {
       loadUserCollections(auth.getIn(['user', 'username']));
     }
   }
@@ -67,7 +67,7 @@ class CollectionDropdownUI extends Component {
     const { activeCollection, collections, fromCollection, mostRecent, newCollection, setCollection } = this.props;
     const { filter } = this.state;
 
-    if (!fromCollection && !this.props.loading && prevProps.loading && activeCollection !== mostRecent) {
+    if (!fromCollection && !this.props.loading && prevProps.loading && activeCollection.id !== mostRecent) {
       setCollection(mostRecent);
     } else if (fromCollection && fromCollection !== prevProps.fromCollection) {
       setCollection(fromCollection);

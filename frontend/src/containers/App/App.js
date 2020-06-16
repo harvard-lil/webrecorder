@@ -55,7 +55,7 @@ export class App extends Component {
       loginStateAlert: false,
       mobileAlert: true,
       outOfSpaceAlert: true,
-      stalled: false,
+      stalled: false
     };
   }
 
@@ -99,6 +99,11 @@ export class App extends Component {
     }
 
     document.addEventListener(this.visibilityChange, this.heartbeat);
+
+    if (__DESKTOP__) {
+      //this.setState({ match: this.getActiveRoute("/") });
+      this.props.history.push("/");
+    }
   }
 
   componentDidUpdate(prevProps) {
@@ -146,7 +151,7 @@ export class App extends Component {
     const { route: { routes } } = this.props;
 
     const match = routes.find((route) => {
-      return matchPath(url, route);
+      return matchPath(this.props.location.pathname, route);
     });
 
     return match;
@@ -216,11 +221,14 @@ export class App extends Component {
         {
           isOutOfSpace && this.state.outOfSpaceAlert &&
             <Alert bsStyle="warning" className="oos-alert" onDismiss={this.dismissSpaceAlert}>
-              <p><b>Your account is out of space.</b> This means you can't record anything right now.</p>
-              To be able to record again, you can:
+              <p><b>Your account is out of space.</b> This means you can't capture anything right now.</p>
+              To be able to capture again, you can:
               <ul>
-                <li>Download some collections or recordings and then delete them to make space.</li>
-                <li><a href={`mailto:${config.supportEmail}`}>Contact Us</a> to request more space.</li>
+                {
+                  config.supporterPortal &&
+                    <li><a href={config.supporterPortal} target="_blank">Become a Supporter</a> to get more storage space.</li>
+                }
+                <li>Download some collections or sessions and then delete them to make more space.</li>
               </ul>
             </Alert>
         }
@@ -237,7 +245,7 @@ export class App extends Component {
             </Panel>
         }
         {
-          this.isMobile && this.state.mobileAlert &&
+          !isEmbed && this.isMobile && this.state.mobileAlert &&
             <Alert className="mobile-alert" onDismiss={this.dismissMobileAlert}>
               Please note: Webrecorder doesn't currently support mobile devices.
             </Alert>
@@ -269,7 +277,7 @@ export class App extends Component {
             </section>
         }
         {
-          hasFooter &&
+          hasFooter && !__DESKTOP__ &&
             <Footer />
         }
       </React.Fragment>

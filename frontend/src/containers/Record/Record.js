@@ -1,17 +1,28 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import Helmet from 'react-helmet';
+import classNames from 'classnames';
 import { asyncConnect } from 'redux-connect';
 
 import config from 'config';
 
 import { isLoaded, load as loadColl } from 'store/modules/collection';
 import { getArchives, updateUrl } from 'store/modules/controls';
+import { resetStats } from 'store/modules/infoStats';
 import { loadRecording } from 'store/modules/recordings';
 import { load as loadBrowsers, isLoaded as isRBLoaded, setBrowser } from 'store/modules/remoteBrowsers';
 
-import { RemoteBrowser } from 'containers';
+import { Autopilot, RemoteBrowser } from 'containers';
 import { IFrame, ReplayUI } from 'components/controls';
+
+
+let Webview;
+let ipcRenderer;
+if (__DESKTOP__) {
+  // eslint-disable-next-line
+  ipcRenderer = window.require('electron').ipcRenderer;
+  Webview = require('components/desktop/Webview');
+}
 
 
 class Record extends Component {
@@ -21,9 +32,11 @@ class Record extends Component {
 
   static propTypes = {
     activeBrowser: PropTypes.string,
-    autoscroll: PropTypes.bool,
+    appSettings: PropTypes.object,
+    behavior: PropTypes.bool,
     auth: PropTypes.object,
     collection: PropTypes.object,
+    autopilotRunning: PropTypes.bool,
     dispatch: PropTypes.func,
     match: PropTypes.object,
     timestamp: PropTypes.string,
@@ -33,7 +46,10 @@ class Record extends Component {
   // TODO move to HOC
   static childContextTypes = {
     currMode: PropTypes.string,
-    canAdmin: PropTypes.bool
+    canAdmin: PropTypes.bool,
+    coll: PropTypes.string,
+    rec: PropTypes.string,
+    user: PropTypes.string,
   };
 
   constructor(props) {
@@ -43,12 +59,20 @@ class Record extends Component {
   }
 
   getChildContext() {
-    const { auth, match: { params: { user } } } = this.props;
+    const { auth, match: { params: { user, coll, rec } } } = this.props;
 
     return {
       currMode: 'record',
-      canAdmin: auth.getIn(['user', 'username']) === user
+      canAdmin: auth.getIn(['user', 'username']) === user,
+      user,
+      coll,
+      rec
     };
+  }
+
+  componentWillUnmount() {
+    // clear info stats
+    this.props.dispatch(resetStats());
   }
 
   // shouldComponentUpdate(nextProps) {
@@ -61,7 +85,7 @@ class Record extends Component {
   // }
 
   render() {
-    const { activeBrowser, dispatch, match: { params }, timestamp, url } = this.props;
+    const { activeBrowser, appSettings, autopilotRunning, dispatch, match: { params }, timestamp, url } = this.props;
     const { user, coll, rec } = params;
 
     const appPrefix = `${config.appHost}/${user}/${coll}/${rec}/record/`;
@@ -70,31 +94,53 @@ class Record extends Component {
     return (
       <React.Fragment>
         <Helmet>
-          <title>Recording</title>
+          <title>Capturing</title>
         </Helmet>
         <ReplayUI
           activeBrowser={activeBrowser}
+          autopilotRunning={autopilotRunning}
+          canGoBackward={__DESKTOP__ ? appSettings.get('canGoBackward') : false}
+          canGoForward={__DESKTOP__ ? appSettings.get('canGoForward') : false}
           params={params}
           url={url} />
 
-        <div className="iframe-container">
+        <div className={classNames('iframe-container', { locked: autopilotRunning })}>
           {
-            activeBrowser ?
-              <RemoteBrowser
-                params={params}
-                rb={activeBrowser}
-                rec={rec}
-                url={url} /> :
-              <IFrame
-                appPrefix={appPrefix}
-                auth={this.props.auth}
-                autoscroll={this.props.autoscroll}
-                contentPrefix={contentPrefix}
+            __DESKTOP__ &&
+              <Webview
+                behavior={this.props.behavior}
+                canGoBackward={appSettings.get('canGoBackward')}
+                canGoForward={appSettings.get('canGoForward')}
                 dispatch={dispatch}
+                host={appSettings.get('host')}
+                key="webview"
                 params={params}
+                partition={`persist:${params.user}`}
                 timestamp={timestamp}
                 url={url} />
           }
+
+          {
+            !__DESKTOP__ && (
+              activeBrowser ?
+                <RemoteBrowser
+                  params={params}
+                  rb={activeBrowser}
+                  rec={rec}
+                  url={url} /> :
+                <IFrame
+                  appPrefix={appPrefix}
+                  auth={this.props.auth}
+                  behavior={this.props.behavior}
+                  contentPrefix={contentPrefix}
+                  dispatch={dispatch}
+                  params={params}
+                  timestamp={timestamp}
+                  url={url} />
+            )
+          }
+
+          <Autopilot />
         </div>
       </React.Fragment>
     );
@@ -104,7 +150,7 @@ class Record extends Component {
 const initialData = [
   {
     promise: ({ store: { dispatch, getState } }) => {
-      if (!isRBLoaded(getState()) && !__PLAYER__) {
+      if (!isRBLoaded(getState()) && !__DESKTOP__) {
         return dispatch(loadBrowsers());
       }
 
@@ -156,12 +202,33 @@ const initialData = [
   }
 ];
 
+if (__DESKTOP__) {
+  initialData.push(
+    {
+      promise: () => {
+        ipcRenderer.send('toggle-proxy', true);
+        return new Promise((resolve, reject) => {
+          ipcRenderer.on('toggle-proxy-done', () => { resolve(true); });
+        });
+      }
+    },
+  );
+}
+
 const mapStateToProps = ({ app }) => {
+  let appSettings = null;
+
+  if (__DESKTOP__) {
+    appSettings = app.get('appSettings');
+  }
+
   return {
     activeBrowser: app.getIn(['remoteBrowsers', 'activeBrowser']),
-    autoscroll: app.getIn(['controls', 'autoscroll']),
+    appSettings,
     auth: app.get('auth'),
+    behavior: app.getIn(['automation', 'behavior']),
     collection: app.get('collection'),
+    autopilotRunning: app.getIn(['automation', 'autopilotStatus']) === 'running',
     timestamp: app.getIn(['controls', 'timestamp']),
     url: app.getIn(['controls', 'url'])
   };

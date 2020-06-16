@@ -1,12 +1,15 @@
 from webrecorder.basecontroller import BaseController
 from webrecorder.models.auto import Auto
-from bottle import request
+from bottle import request, response
+import requests
+import os
+from webrecorder.apiutils import wr_api_spec
 
 
 # ============================================================================
 class AutoController(BaseController):
     def init_routes(self):
-
+        wr_api_spec.set_curr_tag('Automation')
         # CREATE AUTO
         @self.app.post('/api/v1/auto')
         def create_auto():
@@ -66,21 +69,7 @@ class AutoController(BaseController):
 
             return {'deleted_id': auto.my_id}
 
-        # START BEHAVIOR
-        @self.app.post('/api/v1/browser/behavior/start/<reqid>')
-        def start_browser(reqid):
-            self.require_admin_beta_access()
-
-            res = Auto.do_request('/api/behavior/start/' + reqid, use_pool=False)
-            return res
-
-        # STOP BEHAVIOR
-        @self.app.post('/api/v1/browser/behavior/stop/<reqid>')
-        def stop_browser(reqid):
-            self.require_admin_beta_access()
-
-            res = Auto.do_request('/api/behavior/stop/' + reqid, use_pool=False)
-            return res
+        wr_api_spec.set_curr_tag(None)
 
     def load_user_coll_auto(self, autoid, user=None, coll_name=None):
         user, collection = self.load_user_coll(user=user, coll_name=coll_name)

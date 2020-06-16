@@ -15,8 +15,10 @@ import './style.scss';
 class AppHeader extends PureComponent {
   static propTypes = {
     authUser: PropTypes.object,
+    history: PropTypes.object,
     is404: PropTypes.bool,
-    location: PropTypes.object
+    location: PropTypes.object,
+    routes: PropTypes.array
   };
 
   getActiveMatch = memoize((url) => {
@@ -32,19 +34,26 @@ class AppHeader extends PureComponent {
     const { authUser, is404, location: { pathname } } = this.props;
     const { match, route } = this.getActiveMatch(pathname);
     const canAdmin = match && match.params.user === authUser.get('username');
+    const hostedLink = !__DESKTOP__ && canAdmin ? `/${match.params.user}` : '/';
 
     return (
       <header className={classNames('app-header', { dark: canAdmin })}>
         <nav className="header-webrecorder" role="navigation">
           <div className="navbar-tools">
-            <NavLink to="/" className="wr-logomark"><LogoIcon darkMode={canAdmin} /></NavLink>
+            <NavLink to={__DESKTOP__ ? `/${authUser.get('username')}` : hostedLink} className={classNames('wr-logomark', { desktop: __DESKTOP__ })}>
+              {
+                __DESKTOP__ ?
+                  'Webrecorder' :
+                  <LogoIcon darkMode={canAdmin} />
+              }
+            </NavLink>
             {
               canAdmin ?
                 match.params.coll && <AdminHeader managing={route.managementView} /> :
                 <BreadcrumbsUI is404={is404} url={pathname} />
             }
           </div>
-          <UserManagement canAdmin={canAdmin} />
+          <UserManagement route={route} canAdmin={canAdmin} />
         </nav>
       </header>
     );

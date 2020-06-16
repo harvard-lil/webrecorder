@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
+import classNames from 'classnames';
 import { asyncConnect } from 'redux-connect';
 import { batchActions } from 'redux-batched-actions';
 
@@ -13,7 +14,7 @@ import { resetStats } from 'store/modules/infoStats';
 import { load as loadBrowsers, isLoaded as isRBLoaded, setBrowser } from 'store/modules/remoteBrowsers';
 import { getActiveCollection } from 'store/selectors';
 
-import { RemoteBrowser } from 'containers';
+import { Autopilot, RemoteBrowser } from 'containers';
 import { IFrame, ReplayUI } from 'components/controls';
 
 
@@ -26,10 +27,11 @@ class Extract extends Component {
     activeBrowser: PropTypes.string,
     activeCollection: PropTypes.object,
     auth: PropTypes.object,
-    autoscroll: PropTypes.bool,
+    behavior: PropTypes.bool,
     collection: PropTypes.object,
     dispatch: PropTypes.func,
     extractable: PropTypes.object,
+    autopilotRunning: PropTypes.bool,
     match: PropTypes.object,
     timestamp: PropTypes.string,
     url: PropTypes.string
@@ -63,7 +65,7 @@ class Extract extends Component {
   }
 
   render() {
-    const { activeBrowser, activeCollection, dispatch, extractable, match: { params }, timestamp, url } = this.props;
+    const { activeBrowser, activeCollection, autopilotRunning, dispatch, extractable, match: { params }, timestamp, url } = this.props;
     const { user, coll, rec } = params;
 
     const archId = extractable.get('id');
@@ -74,12 +76,14 @@ class Extract extends Component {
     return (
       <React.Fragment>
         <ReplayUI
+          activeBrowser={activeBrowser}
           activeCollection={activeCollection}
+          autopilotRunning={autopilotRunning}
           params={params}
           timestamp={timestamp}
           url={url} />
 
-        <div className="iframe-container">
+        <div className={classNames('iframe-container', { locked: autopilotRunning })}>
           {
             activeBrowser ?
               <RemoteBrowser
@@ -91,13 +95,14 @@ class Extract extends Component {
               <IFrame
                 appPrefix={appPrefix}
                 auth={this.props.auth}
-                autoscroll={this.props.autoscroll}
+                behavior={this.props.behavior}
                 contentPrefix={contentPrefix}
                 dispatch={dispatch}
                 params={params}
                 timestamp={timestamp}
                 url={url} />
           }
+          <Autopilot />
         </div>
       </React.Fragment>
     );
@@ -107,7 +112,7 @@ class Extract extends Component {
 const initialData = [
   {
     promise: ({ store: { dispatch, getState } }) => {
-      if (!isRBLoaded(getState()) && !__PLAYER__) {
+      if (!isRBLoaded(getState()) && !__DESKTOP__) {
         return dispatch(loadBrowsers());
       }
 
@@ -170,9 +175,10 @@ const mapStateToProps = ({ app }) => {
     activeBrowser: app.getIn(['remoteBrowsers', 'activeBrowser']),
     activeCollection: getActiveCollection(app),
     auth: app.get('auth'),
-    autoscroll: app.getIn(['controls', 'autoscroll']),
+    behavior: app.getIn(['automation', 'behavior']),
     collection: app.get('collection'),
     extractable: app.getIn(['controls', 'extractable']),
+    autopilotRunning: app.getIn(['automation', 'autopilotStatus']) === 'running',
     timestamp: app.getIn(['controls', 'timestamp']),
     url: app.getIn(['controls', 'url'])
   };

@@ -20,6 +20,10 @@ docker push harvardlil/webrecorder:0.05
 
 CHANGELOG
 ---------
+### 0.11
+- Update to Webrecorder/master@a2bc3b367c2602d2f153cbd06ea09d0eb6faec3e (latest, pre-Conifer)
+- Update to latest Pywb; pin to today's digest
+
 ### 0.10
 - Update to Webrecorder '4.4.0'
 - Update Pywb image version to match; pin to today's digest

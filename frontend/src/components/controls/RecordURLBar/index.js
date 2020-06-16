@@ -19,6 +19,7 @@ class RecordURLBar extends Component {
   static propTypes = {
     activeBrowser: PropTypes.string,
     activeCollection: PropTypes.object,
+    autopilotRunning: PropTypes.bool,
     history: PropTypes.object,
     params: PropTypes.object,
     timestamp: PropTypes.string,
@@ -52,6 +53,9 @@ class RecordURLBar extends Component {
       evt.preventDefault();
 
       switch(currMode) {
+        case 'live':
+          history.push(`/${user}/${coll}/live/${url}`);
+          break;
         case 'record':
           history.push(`/${user}/${coll}/${rec}/record/${remoteBrowserMod(activeBrowser, null, '/')}${url}`);
           break;
@@ -69,7 +73,7 @@ class RecordURLBar extends Component {
 
   render() {
     const { currMode, canAdmin } = this.context;
-    const { activeCollection, params } = this.props;
+    const { activeCollection, autopilotRunning, params } = this.props;
     const { url } = this.state;
 
     const isNew = currMode === 'new';
@@ -80,17 +84,20 @@ class RecordURLBar extends Component {
       <div className="main-bar">
         <form className={classNames('form-group-recorder-url', { 'start-recording': isNew, 'content-form': !isNew, 'remote-archive': isPatch || isExtract })}>
           <div className="input-group containerized">
-            <div className="input-group-btn rb-dropdown">
-              {
-                canAdmin &&
-                  <RemoteBrowserSelect
-                    active
-                    params={params} />
-              }
-            </div>
+            {
+              !__DESKTOP__ && canAdmin &&
+                <div className="input-group-btn rb-dropdown">
+                  {
+                    <RemoteBrowserSelect
+                      active
+                      autopilotRunning={autopilotRunning}
+                      params={params} />
+                  }
+                </div>
+            }
             {
               /* {% if not browser %}autofocus{% endif %} */
-              <input type="text" onChange={this.handleChange} onKeyPress={this.handleSubmit} className="url-input-recorder form-control" name="url" value={url} style={{ height: '3.3rem' }} autoFocus required />
+              <input type="text" disabled={autopilotRunning} onChange={this.handleChange} onKeyPress={this.handleSubmit} className="url-input-recorder form-control" name="url" value={url} style={{ height: '3.2rem' }} autoFocus required />
             }
             {
               isExtract &&
